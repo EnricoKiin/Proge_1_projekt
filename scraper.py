@@ -21,9 +21,8 @@ mustad_kategooriad = [loc.text for loc in sitemap_soup.find_all("loc")]
 puhtad_kategooriad = [url for url in mustad_kategooriad if "?tag=" not in url] #Eemaldab alamkategooriad, et vähem asju otsida
 
 scrape_info = ["olu", "viin", "siider", "vein"]
-scrape_targets = []
-for url in puhtad_kategooriad:
-    for el in scrape_info:
-        if re.search(rf"/{el}\b", url, re.IGNORECASE): # \b - boundary - leiab ainult need võtmasõnad, mida tahame
-            scrape_targets.append(url)
-            break
+
+muster = re.compile(rf"/({'|'.join(scrape_info)})(?:/|$)", re.IGNORECASE) #Saaks panna ka alguse https://ostukorvid.ee/kategooriad/, aga seega võib ka lihtsamini katki minna
+
+scrape_targets = [url for url in puhtad_kategooriad if muster.search(url)]
+print(scrape_targets)
