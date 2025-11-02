@@ -38,31 +38,56 @@ def kasulik_info(leht):
 
     info_kaart = [el for el in supp.select(".ml-1.w-full")] #Siin on ka alkoholivabad tooted. Tooted millel pole % märgitud ja tooted millel pole maht märgitud.
     kasulik_info_kaart = []
-    #print(info_kaart)
-    nimed = []
     for el in info_kaart:
-        nimi = el.select_one(".line-clamp-2.text-base").text.strip().lower()
-        if "%" and "vol" not in nimi:
+       
+        nimi_el = el.select_one(".line-clamp-2.text-base")
+        if not nimi_el:
             continue
-        elif "ml" and "cl" and "l" not in nimi:
+        
+        nimi = nimi_el.text.strip().lower()
+        
+        if "%" not in nimi:
+            continue
+        elif not any(x in nimi for x in ["ml", "cl", "l"]):
             continue
         elif "alk.vaba" in nimi or "alkoholivaba" in nimi:
             continue
-        else:
-            kasulik_info_kaart.append(el)
-    driver.close
+        
+        parent_el = nimi_el.find_parent("a")
+        if not parent_el or not parent_el.has_attr("href"):
+            continue
+        link = parent_el["href"]
+        toote_info_paar = (nimi, link) #Ennik, et hoida info koos
+        kasulik_info_kaart.append(toote_info_paar)
+
+    driver.close()
     return kasulik_info_kaart
 
-"""def toote_info_kaartidest(jär):
-    for el in jär:
-        rida = el.select_one(".line-clamp-2.text-base").text.strip().lower()
-        toote_protsent =
-        toote_maht = re.search()"""
-"""protsendid = []
 a = kasulik_info("https://ostukorvid.ee/kategooriad/olu?price=unit")
 for el in a:
-    toode = el.select_one(".line-clamp-2.text-base").text.strip().lower()
-    pr_i = toode.index("%")
-    protsent = toode[(pr_i - 5):(pr_i + 4)]
-    protsendid.append(protsent)
-print(protsendid)"""
+    toode = a[0]
+    toote_link = a[1]
+    
+    toote_protsent_tekst = re.search(r"(\d+(?:[.,]\d+)?)\s*%", toode)
+    toote_protsent = float(toote_protsent_tekst.group(1).replace(',', '.'))
+    if toote_protsent == 0.0: #Mõnel alko tootel pandud 0.0, et näidata alkovaba
+        continue
+    
+    toote_maht_tekst = re.search(r"(?:(\d+)\s*[x×*]\s*)?(\d+(?:[.,]\d+)?)\s*(ml|cl|l)", toode)
+    if toote_maht_tekst.group(1):
+        toodet_pakis = int(toote_maht_tekst.group(1))
+    else:
+        toodet_pakis = 1
+    toote_maht = float(toote_maht_tekst.group(2).replace(',', '.'))
+    mahu_ühik = toote_maht_tekst.group(3)
+    #konverteerin milliliitriteks
+    if mahu_ühik == "ml":
+        pass
+    elif mahu_ühik == "cl":
+        toote_maht *= 10
+    else:
+        toote_maht *= 1000
+    kogu_maht = toodet_pakis * toote_maht #ml
+    
+    toote_nimi_tekst = re.search(r"^(.*?)\s*\d",toode)
+print(protsendid)
