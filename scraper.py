@@ -65,21 +65,35 @@ def kasulik_info(leht):
 
 a = kasulik_info("https://ostukorvid.ee/kategooriad/olu?price=unit")
 for el in a:
-    toode = a[0]
-    toote_link = a[1]
+    toode = el[0]
+    toote_link = el[1]
     
+    # Leian protsendi
     toote_protsent_tekst = re.search(r"(\d+(?:[.,]\d+)?)\s*%", toode)
+    if not toote_protsent_tekst:
+        continue
+
     toote_protsent = float(toote_protsent_tekst.group(1).replace(',', '.'))
     if toote_protsent == 0.0: #Mõnel alko tootel pandud 0.0, et näidata alkovaba
         continue
     
-    toote_maht_tekst = re.search(r"(?:(\d+)\s*[x×*]\s*)?(\d+(?:[.,]\d+)?)\s*(ml|cl|l)", toode)
+    #Leian Mahu
+    toote_maht_tekst = re.search(r"""
+                                 (?:(\d+)\s*[x×*]\s*)? #Paki toodete jaoks nt 24x330ml , leiab 24 sealt
+                                 (\d+(?:[.,]\d+)?) #ühiku väärtus nt 500
+                                 \s*
+                                 (ml|cl|l)""" #ühik
+                                 , toode, re.VERBOSE)
+    if not toote_maht_tekst:
+        continue
+
     if toote_maht_tekst.group(1):
         toodet_pakis = int(toote_maht_tekst.group(1))
     else:
         toodet_pakis = 1
     toote_maht = float(toote_maht_tekst.group(2).replace(',', '.'))
     mahu_ühik = toote_maht_tekst.group(3)
+
     #konverteerin milliliitriteks
     if mahu_ühik == "ml":
         pass
@@ -89,5 +103,44 @@ for el in a:
         toote_maht *= 1000
     kogu_maht = toodet_pakis * toote_maht #ml
     
+    #Leian nime
     toote_nimi_tekst = re.search(r"^(.*?)\s*\d",toode)
-print(protsendid)
+    toote_nimi = toote_nimi_tekst.group(1).strip() if toote_nimi_tekst else toode #Juhl kui on nt "24x330ml Saku Originaal" toote nimi
+
+    #Hind poe kohta
+    driver.get(toote_link)
+    info_supp = BeautifulSoup(driver.page_source, "html.parser")
+
+    sega_info = info_supp.select_one(".col-span-2.mt-2")
+    
+    poed= sega_info.find_all("a")
+
+    for pood in poed:
+        #Leian poe nime
+        for span in pood.find_all("span"):
+            tekst = span.get_text(strip=True)
+            if tekst:
+                poe_nimi = tekst
+                break
+        #Leian hinna
+        hind_el = pood.select_one("span.text-xl.font-bold")
+        if hind_el:
+            hind_tekst = hind_el.text.strip()
+            hind = float(re.search("(\d+(?:[.,]\d+)?)\s*€", hind_tekst).group(1).replace(',', '.'))
+        else:
+            hind = None
+        
+        #Leian millal viimati uuendati --------POOLELI. Hetkel ei arvesta, et võib olla päeva, kuud, minutit tagasi.
+        viimati_uuendatud_el = pood.select_one("span.mr-1.hidden.text-xs.text-gray-600.dark:text-gray-400.lg:inline-block")
+        if viimati_uuendatud_el:
+            viimati_uuendatud_sisu = viimati_uuendatud_el.text.strip()
+            viimati_uuendatud_tekst = re.search("(\d+)\s*tundi\s*tagasi", viimati_uuendatud_sisu)
+            if viimati_uuendatud_tekst:
+                tund = float(viimati_uuendatud_tekst.group(1))
+            else:
+                tund = None
+        else:
+            tund = None
+
+
+
