@@ -8,6 +8,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import time, random
 
@@ -21,8 +22,16 @@ options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--blink-settings=imagesEnabled=false")  # Ei lae pilte
 options.add_argument("--window-size=1920,1080")
+options.add_argument("--blink-settings=imagesEnabled=false")
+prefs = {
+    "profile.managed_default_content_settings.images": 2,
+    "profile.managed_default_content_settings.fonts": 2,
+    "profile.managed_default_content_settings.notifications": 2,
+}
+options.add_experimental_option("prefs", prefs)
 driver = webdriver.Chrome(options=options)
 driver.set_page_load_timeout(15) #Oota lehe järgi max 15 s
+
 
 # Kasutame BeautifulSoupi, et saada sitemapist kategooriad ning seejärel leiame nende kategooriate veebilehed, mida soovime
 sitemap_url = "https://ostukorvid.ee/sitemap.xml"
@@ -133,7 +142,6 @@ for el in a:
     except Exception as e:
         print(f"Error while loading {toote_link}: {type(e).__name__}")
         continue
-    time.sleep(random.uniform(0.2, 0.8))
     try:
     # Oota kuni poeinfo konteiner on nähtav (max 10 sekundit)
         WebDriverWait(driver, 5, poll_frequency=0.2).until(
