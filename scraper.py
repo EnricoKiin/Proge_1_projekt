@@ -9,11 +9,20 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import re
+import time, random
 
 # Seleniumi seadistamine, et brauser ei sulguks automaatselt
 options = Options()
-options.add_experimental_option("detach", True)
+#options.add_experimental_option("detach", True) - lisa kui tahad brauser akent näha
+options.add_argument("--headless=new")
+options.add_argument("--disable-gpu")
+options.add_argument("--disable-extensions")
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--blink-settings=imagesEnabled=false")  # Ei lae pilte
+options.add_argument("--window-size=1920,1080")
 driver = webdriver.Chrome(options=options)
+driver.set_page_load_timeout(15) #Oota lehe järgi max 15 s
 
 # Kasutame BeautifulSoupi, et saada sitemapist kategooriad ning seejärel leiame nende kategooriate veebilehed, mida soovime
 sitemap_url = "https://ostukorvid.ee/sitemap.xml"
@@ -32,7 +41,7 @@ scrape_targets = [url for url in puhtad_kategooriad if muster.search(url)]
 def kasulik_info(leht):
     driver.get(leht)
 
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ml-1.w-full")))
+    WebDriverWait(driver, 5, poll_frequency=0.2).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ml-1.w-full")))
 
     supp = BeautifulSoup(driver.page_source, "html.parser")
 
@@ -57,13 +66,19 @@ def kasulik_info(leht):
         if not parent_el or not parent_el.has_attr("href"):
             continue
         link = parent_el["href"]
+        if not link.startswith("http"):
+            link = "https://ostukorvid.ee" + link
         toote_info_paar = (nimi, link) #Ennik, et hoida info koos
         kasulik_info_kaart.append(toote_info_paar)
-
-    driver.close()
     return kasulik_info_kaart
 
+lõpp_tulemus = []
+mahu_err = 0
+prot_err = 0
+prot_err_alk_vaba = 0
+mitmes_tood = 0
 a = kasulik_info("https://ostukorvid.ee/kategooriad/olu?price=unit")
+print(len(a))
 for el in a:
     toode = el[0]
     toote_link = el[1]
@@ -71,10 +86,13 @@ for el in a:
     # Leian protsendi
     toote_protsent_tekst = re.search(r"(\d+(?:[.,]\d+)?)\s*%", toode)
     if not toote_protsent_tekst:
+        prot_err += 1
         continue
 
     toote_protsent = float(toote_protsent_tekst.group(1).replace(',', '.'))
     if toote_protsent == 0.0: #Mõnel alko tootel pandud 0.0, et näidata alkovaba
+        print(f"Alkovaba err: {toode}")
+        prot_err_alk_vaba += 1
         continue
     
     #Leian Mahu
@@ -85,6 +103,8 @@ for el in a:
                                  (ml|cl|l)""" #ühik
                                  , toode, re.VERBOSE)
     if not toote_maht_tekst:
+        print(f"MAHU VIGA: {toode}")
+        mahu_err += 1
         continue
 
     if toote_maht_tekst.group(1):
@@ -106,14 +126,31 @@ for el in a:
     #Leian nime
     toote_nimi_tekst = re.search(r"^(.*?)\s*\d",toode)
     toote_nimi = toote_nimi_tekst.group(1).strip() if toote_nimi_tekst else toode #Juhl kui on nt "24x330ml Saku Originaal" toote nimi
-
+    ühe_toote_info = [toote_nimi, kogu_maht, toote_protsent]
     #Hind poe kohta
-    driver.get(toote_link)
+    try:
+        driver.get(toote_link)
+    except Exception as e:
+        print(f"Error while loading {toote_link}: {type(e).__name__}")
+        continue
+    time.sleep(random.uniform(0.2, 0.8))
+    try:
+    # Oota kuni poeinfo konteiner on nähtav (max 10 sekundit)
+        WebDriverWait(driver, 5, poll_frequency=0.2).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, ".col-span-2.mt-2")))
+    except:
+        print(f"Poeinfo konteinerit ei ilmunud: {toote_link}")
+        continue
     info_supp = BeautifulSoup(driver.page_source, "html.parser")
 
     sega_info = info_supp.select_one(".col-span-2.mt-2")
+    if not sega_info:
+    # Kui ei leia, kuva hoiatus ja toote lehe pealkiri, et näha mis läks valesti
+        page_title = info_supp.title.string.strip() if info_supp.title else "No title"
+        print(f"Ei leidnud poe infot lehel: {toote_link} — Lehe pealkiri: {page_title}")
+        continue  # jätkab järgmise tootega
     
-    poed= sega_info.find_all("a")
+    poed = sega_info.find_all("a")
 
     for pood in poed:
         #Leian poe nime
@@ -126,21 +163,31 @@ for el in a:
         hind_el = pood.select_one("span.text-xl.font-bold")
         if hind_el:
             hind_tekst = hind_el.text.strip()
-            hind = float(re.search("(\d+(?:[.,]\d+)?)\s*€", hind_tekst).group(1).replace(',', '.'))
+            hind = float(re.search(r"(\d+(?:[.,]\d+)?)\s*€", hind_tekst).group(1).replace(',', '.'))
         else:
             hind = None
-        
+        poe_info = (poe_nimi, hind)
+        ühe_toote_info.append(poe_info)
+    mitmes_tood += 1
+    print(mitmes_tood)
+    lõpp_tulemus.append(ühe_toote_info)
+
+print(lõpp_tulemus)
+print(mahu_err)
+print(prot_err)
+print(prot_err_alk_vaba)
+"""
         #Leian millal viimati uuendati --------POOLELI. Hetkel ei arvesta, et võib olla päeva, kuud, minutit tagasi.
         viimati_uuendatud_el = pood.select_one("span.mr-1.hidden.text-xs.text-gray-600.dark:text-gray-400.lg:inline-block")
         if viimati_uuendatud_el:
             viimati_uuendatud_sisu = viimati_uuendatud_el.text.strip()
-            viimati_uuendatud_tekst = re.search("(\d+)\s*tundi\s*tagasi", viimati_uuendatud_sisu)
+            viimati_uuendatud_tekst = re.search(r"(\d+)\s*tundi\s*tagasi", viimati_uuendatud_sisu)
             if viimati_uuendatud_tekst:
                 tund = float(viimati_uuendatud_tekst.group(1))
             else:
                 tund = None
         else:
             tund = None
-
+"""
 
 
