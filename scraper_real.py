@@ -2,12 +2,13 @@
 
 # class=ml-1.w-full selles on kogu info
 from playwright.sync_api import sync_playwright
-import requests, re, time, random
+import requests, re, time, random, os
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 
 # Playwright seadistus
 with sync_playwright() as p:
+    storage_state = "auth.json" if os.path.exists("auth.json") else None
     browser = p.chromium.launch(
         headless = True,
         args=[
@@ -19,21 +20,32 @@ with sync_playwright() as p:
         "--window-size=1920,1080"
         ]
     )
+    #Natuke lisainfot igale browserile, et me ei näeks liiga scraperi moodi välja
 
     context = browser.new_context(
-    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        storage_state=storage_state,
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    locale="et-EE",
-    timezone_id="Europe/Tallinn",
-    viewport={"width": 1920, "height": 1080},
-    bypass_csp=True,
+        locale="et-EE",
+        timezone_id="Europe/Tallinn",
+        viewport={"width": 1920, "height": 1080},
+        bypass_csp=True,
     )
     page = context.new_page()
     page.set_default_timeout(15000)
     page.route("**/*", lambda route, request:
         route.abort() if request.resource_type in ["image","font","stylesheet"] else route.continue_()
     )
-    context.storage_state(path="auth.json")
+    
+    if (not os.path.exists("auth.json")) or os.stat("auth.json").st_size < 50 or (
+        time.time() - os.path.getmtime("auth.json") > 86400
+        ):
+        print("Küpsiste uuendamine")
+        page.goto("https://ostukorvid.ee", wait_until="networkidle")
+        context.storage_state(path="auth.json")
+        print("Valmis")
+    else:
+        print("Küpsised veel värsekd")
 
 
 
@@ -100,7 +112,7 @@ with sync_playwright() as p:
     with open("olu_tulemus.csv", "w", encoding="UTF-8") as f:
         f.write("Toode;Maht_ml;Protsent;Pood;Hind;Uuendatud\n")
         for el in a:
-            toode_el = el[0]
+            toode_el = el[0].strip()
             toode = toode_el.strip().lower()
             toote_link = el[1]
             
@@ -153,7 +165,7 @@ with sync_playwright() as p:
             #toote_nimi_match = re.search(r"^(.*?)\s*\d",toode)
             #toote_nimi = toote_nimi_match.group(1).strip() if toote_nimi_match else toode #Juhl kui on nt "24x330ml Saku Originaal" toote nimi
             #ühe_toote_info = [toote_nimi, kogu_maht, toote_protsent]
-            toote_nimi = toode
+            toote_nimi = toode_el
             
             
             
