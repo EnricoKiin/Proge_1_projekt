@@ -1,3 +1,56 @@
+"""
+Vale scraper
+Vale scraper
+Vale scraper
+Vale scraper
+Vale scraper
+Vale scraper
+Vale scraper
+Vale scraper
+Vale scraper
+Vale scraper
+"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #Alguses tee pip install requests beautifulsoup4 selenium terminalis. Muidu ei tööta
 
 # class=ml-1.w-full selles on kogu info
