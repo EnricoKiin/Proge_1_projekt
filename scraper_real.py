@@ -216,4 +216,4 @@ with sync_playwright() as p:
                             aeg_ümar = aeg.replace(second=0, microsecond=0)
                 mitmes_tood += 1
                 print(mitmes_tood)
-                f.write(f"{toote_nimi};{kogu_maht};{toote_protsent};{poe_nimi};{hind};{aeg_ümar}\n")
+                f.write(f"{toote_nimi},{kogu_maht},{toote_protsent},{poe_nimi},{hind},{aeg_ümar}\n")
