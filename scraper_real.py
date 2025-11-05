@@ -20,12 +20,20 @@ with sync_playwright() as p:
         ]
     )
 
-    context = browser.new_context()
+    context = browser.new_context(
+    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    locale="et-EE",
+    timezone_id="Europe/Tallinn",
+    viewport={"width": 1920, "height": 1080},
+    bypass_csp=True,
+    )
     page = context.new_page()
     page.set_default_timeout(15000)
     page.route("**/*", lambda route, request:
-    route.abort() if request.resource_type == "image" else route.continue_()
+        route.abort() if request.resource_type in ["image","font","stylesheet"] else route.continue_()
     )
+    context.storage_state(path="auth.json")
 
 
 
@@ -56,8 +64,8 @@ with sync_playwright() as p:
             nimi_el = el.select_one(".line-clamp-2.text-base")
             if not nimi_el:
                 continue
-            
-            nimi = nimi_el.text.strip().lower()
+            nimi_el_tekst = nimi_el.text
+            nimi = nimi_el_tekst.strip().lower()
             
             if "%" not in nimi:
                 continue
@@ -72,7 +80,7 @@ with sync_playwright() as p:
             link = parent_el["href"]
             if not link.startswith("http"):
                 link = "https://ostukorvid.ee" + link
-            toote_info_paar = (nimi, link) #Ennik, et hoida info koos
+            toote_info_paar = (nimi_el_tekst, link) #Ennik, et hoida info koos
             kasulik_info_kaart.append(toote_info_paar)
         return kasulik_info_kaart
     """
@@ -92,7 +100,8 @@ with sync_playwright() as p:
     with open("olu_tulemus.csv", "w", encoding="UTF-8") as f:
         f.write("Toode;Maht_ml;Protsent;Pood;Hind;Uuendatud\n")
         for el in a:
-            toode = el[0]
+            toode_el = el[0]
+            toode = toode_el.strip().lower()
             toote_link = el[1]
             
             # Leian protsendi
@@ -141,9 +150,10 @@ with sync_playwright() as p:
 
 
             #Leian nime
-            toote_nimi_match = re.search(r"^(.*?)\s*\d",toode)
-            toote_nimi = toote_nimi_match.group(1).strip() if toote_nimi_match else toode #Juhl kui on nt "24x330ml Saku Originaal" toote nimi
-            ühe_toote_info = [toote_nimi, kogu_maht, toote_protsent]
+            #toote_nimi_match = re.search(r"^(.*?)\s*\d",toode)
+            #toote_nimi = toote_nimi_match.group(1).strip() if toote_nimi_match else toode #Juhl kui on nt "24x330ml Saku Originaal" toote nimi
+            #ühe_toote_info = [toote_nimi, kogu_maht, toote_protsent]
+            toote_nimi = toode
             
             
             
@@ -189,7 +199,7 @@ with sync_playwright() as p:
 
         
         
-                #Leian millal viimati uuendati --------POOLELI. Hetkel ei arvesta, et võib olla päeva, kuud, minutit tagasi.
+                #Leian millal viimati uuendati 
                 ühikud = {
                     "sekund": 1, "sekundit": 1,
                     "minut": 60, "minutit": 60,
@@ -216,4 +226,4 @@ with sync_playwright() as p:
                             aeg_ümar = aeg.replace(second=0, microsecond=0)
                 mitmes_tood += 1
                 print(mitmes_tood)
-                f.write(f"{toote_nimi},{kogu_maht},{toote_protsent},{poe_nimi},{hind},{aeg_ümar}\n")
+                f.write(f"{toote_nimi};{kogu_maht};{toote_protsent};{poe_nimi};{hind};{aeg_ümar}\n")
