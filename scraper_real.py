@@ -6,6 +6,17 @@ import requests, re, time, random, os
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 
+#Võtsin need siit https://www.zenrows.com/blog/user-agent-web-scraping#best
+user_agent_list = ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.2420.81",
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 OPR/109.0.0.0",
+"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+"Mozilla/5.0 (Macintosh; Intel Mac OS X 14.4; rv:124.0) Gecko/20100101 Firefox/124.0",
+"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
+"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 OPR/109.0.0.0",
+"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+"Mozilla/5.0 (X11; Linux i686; rv:124.0) Gecko/20100101 Firefox/124.0"]
 # Playwright seadistus
 with sync_playwright() as p:
     storage_state = "auth.json" if os.path.exists("auth.json") else None
@@ -37,9 +48,7 @@ with sync_playwright() as p:
         route.abort() if request.resource_type in ["image","font","stylesheet"] else route.continue_()
     )
     
-    if (not os.path.exists("auth.json")) or os.stat("auth.json").st_size < 50 or (
-        time.time() - os.path.getmtime("auth.json") > 60
-        ):
+    if time.time() - os.path.getmtime("auth.json") > 60:
         print("Küpsiste uuendamine")
         page.goto("https://ostukorvid.ee", wait_until="networkidle")
         context.storage_state(path="auth.json")
@@ -134,22 +143,25 @@ with sync_playwright() as p:
 
             #Leian Mahu
             toote_maht_match = re.search(r"""
-                                        (?:(\d+)\s*[x×*]\s*)? #Paki toodete jaoks nt 24x330ml , leiab 24 sealt
                                         (\d+(?:[.,]\d+)?) #ühiku väärtus nt 500
                                         \s*
                                         (ml|cl|l)\b""" #ühik
                                         , toode, re.VERBOSE)
+            toote_paki_match = (
+             re.search(r"(\d+)\s*(?:x|×|[-]?\s*(?:pakk|pakend|pk|tk|karp|kohver))", toode, re.IGNORECASE)
+             or
+             re.search(r"(?:x|×)\s*(\d+)\s*(?:tk|pk|pakk|pakend|karp|kohver)?", toode, re.IGNORECASE))
             if not toote_maht_match:
                 print(f"MAHU VIGA: {toode}")
                 #mahu_err += 1
                 continue
 
-            if toote_maht_match.group(1):
-                toodet_pakis = int(toote_maht_match.group(1))
+            if toote_paki_match:
+                toodet_pakis = int(toote_paki_match.group(1))
             else:
                 toodet_pakis = 1
-            toote_maht = float(toote_maht_match.group(2).replace(',', '.'))
-            mahu_ühik = toote_maht_match.group(3)
+            toote_maht = float(toote_maht_match.group(1).replace(',', '.'))
+            mahu_ühik = toote_maht_match.group(2)
 
             #konverteerin milliliitriteks
             if mahu_ühik == "ml":
@@ -176,8 +188,8 @@ with sync_playwright() as p:
             try:
                 page.goto(toote_link)
                 page.wait_for_selector(".col-span-2.mt-2", timeout=5000)
-            except Exception as e:
-                print(f"Poeinfo konteinerit ei ilmunud: {toote_link} ({type(e).__name__})")
+            except:
+                print(f"Poeinfot ei ilmunud: {toote_link}")
                 continue
             
             info_supp = BeautifulSoup(page.content(), "html.parser")
@@ -242,5 +254,5 @@ with sync_playwright() as p:
                             aeg = datetime.now() - aja_erinevus
                             aeg_ümar = aeg.replace(second=0, microsecond=0)
                 mitmes_tood += 1
-                print(mitmes_tood)
+                print(f"{mitmes_tood}", end="\r")
                 f.write(f"{toote_nimi};{kogu_maht};{toote_protsent};{poe_nimi};{hind};{aeg_ümar};{toote_link}\n")
