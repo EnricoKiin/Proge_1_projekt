@@ -38,7 +38,7 @@ with sync_playwright() as p:
     )
     
     if (not os.path.exists("auth.json")) or os.stat("auth.json").st_size < 50 or (
-        time.time() - os.path.getmtime("auth.json") > 86400
+        time.time() - os.path.getmtime("auth.json") > 60
         ):
         print("Küpsiste uuendamine")
         page.goto("https://ostukorvid.ee", wait_until="networkidle")
@@ -108,9 +108,10 @@ with sync_playwright() as p:
     """
     mitmes_tood = 0
     a = kasulik_info("https://ostukorvid.ee/kategooriad/olu?price=unit")
+    random.shuffle(a)
     print(len(a))
     with open("olu_tulemus.csv", "w", encoding="UTF-8") as f:
-        f.write("Toode;Maht_ml;Protsent;Pood;Hind;Uuendatud\n")
+        f.write("Toode;Maht_ml;Protsent;Pood;Hind;Uuendatud;Link\n")
         for el in a:
             toode_el = el[0].strip()
             toode = toode_el.strip().lower()
@@ -224,10 +225,14 @@ with sync_playwright() as p:
                 viimati_uuendatud_el = pood.select_one("span.mr-1.hidden.text-xs.text-gray-600")
                 aeg_ümar = None
                 if viimati_uuendatud_el:
-                    viimati_uuendatud_sisu = viimati_uuendatud_el.text.strip()
-                    viimati_uuendatud_tekst = re.search(r"(\d+)\s*(\w+)\s*tagasi", viimati_uuendatud_sisu)
+                    viimati_uuendatud_sisu = viimati_uuendatud_el.text.strip().lower()
+                    viimati_uuendatud_tekst = re.search(r"""(?:(\d+)[\s\u00A0\u202F]*)? #väärtus
+                                                        ([\wäöüõ]+) #ühik
+                                                        (?:[\s\u00A0\u202F]+aega)? # \u00A0 - nbsp \u202F - nbsp narrrow. Siin vaja millegipärast, muidu annab None vahest
+                                                        [\s\u00A0\u202F]*tagasi""",
+                                                        viimati_uuendatud_sisu, flags=re.UNICODE | re.VERBOSE)
                     if viimati_uuendatud_tekst:
-                        aja_väärtus = int(viimati_uuendatud_tekst.group(1))
+                        aja_väärtus = int(viimati_uuendatud_tekst.group(1)) if viimati_uuendatud_tekst.group(1) else 1 #Kuna tekstis on "uuendatud: tund/minut/päev aega tagasi"
                         ühiku_väärtus = viimati_uuendatud_tekst.group(2)
                         sekundi_väärtus = ühikud.get(ühiku_väärtus)
                         if not sekundi_väärtus:
@@ -238,4 +243,4 @@ with sync_playwright() as p:
                             aeg_ümar = aeg.replace(second=0, microsecond=0)
                 mitmes_tood += 1
                 print(mitmes_tood)
-                f.write(f"{toote_nimi};{kogu_maht};{toote_protsent};{poe_nimi};{hind};{aeg_ümar}\n")
+                f.write(f"{toote_nimi};{kogu_maht};{toote_protsent};{poe_nimi};{hind};{aeg_ümar};{toote_link}\n")
