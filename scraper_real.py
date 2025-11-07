@@ -16,7 +16,7 @@ user_agent_list = ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
 "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 OPR/109.0.0.0",
 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-"Mozilla/5.0 (X11; Linux i686; rv:124.0) Gecko/20100101 Firefox/124.0"]
+"Mozilla/5.0 (X11; Linux i686; rv:124.0) Gecko/20100101 Firefox/124.0", ]
 # Playwright seadistus
 with sync_playwright() as p:
     storage_state = "auth.json" if os.path.exists("auth.json") else None
@@ -35,8 +35,7 @@ with sync_playwright() as p:
 
     context = browser.new_context(
         storage_state=storage_state,
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-               "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        user_agent= random.choice(user_agent_list),
         locale="et-EE",
         timezone_id="Europe/Tallinn",
         viewport={"width": 1920, "height": 1080},
@@ -145,12 +144,12 @@ with sync_playwright() as p:
             toote_maht_match = re.search(r"""
                                         (\d+(?:[.,]\d+)?) #ühiku väärtus nt 500
                                         \s*
-                                        (ml|cl|l)\b""" #ühik
+                                        (ml|cl|l)(?=\W|$|x|×)""" #ühik
                                         , toode, re.VERBOSE)
             toote_paki_match = (
-             re.search(r"(\d+)\s*(?:x|×|[-]?\s*(?:pakk|pakend|pk|tk|karp|kohver))", toode, re.IGNORECASE)
+             re.search(r"(\d+)\s*(?:x|×|[-]?\s*(?:pakk|pakend|pk|tk|karp|kohver))(?=\W|$)", toode)
              or
-             re.search(r"(?:x|×)\s*(\d+)\s*(?:tk|pk|pakk|pakend|karp|kohver)?", toode, re.IGNORECASE))
+             re.search(r"(?:x|×)\s*(\d+)\s*(?:tk|pk|pakk|pakend|karp|kohver)?(?=\W|$)", toode))
             if not toote_maht_match:
                 print(f"MAHU VIGA: {toode}")
                 #mahu_err += 1
@@ -187,6 +186,7 @@ with sync_playwright() as p:
             #Hind poe kohta
             try:
                 page.goto(toote_link)
+                time.sleep(random.uniform(0.5, 1.5))
                 page.wait_for_selector(".col-span-2.mt-2", timeout=5000)
             except:
                 print(f"Poeinfot ei ilmunud: {toote_link}")
