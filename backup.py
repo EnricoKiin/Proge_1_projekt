@@ -15,7 +15,7 @@ import requests
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-from Context_lists import user_agent_list, locale_timezone_list
+from Context_lists import user_agent_list
 
 
 def brauser():
@@ -27,8 +27,7 @@ def brauser():
     """
     p = sync_playwright().start()
     storage_state = "auth.json" if os.path.exists("auth.json") else None
-    suvaline_locale_timzone_dict = random.choice(locale_timezone_list)
-
+    
     browser = p.chromium.launch(
         headless = True,
         args=[
@@ -44,8 +43,8 @@ def brauser():
     context = browser.new_context(
         storage_state=storage_state,
         user_agent= random.choice(user_agent_list),
-        locale=suvaline_locale_timzone_dict["locale"],
-        timezone_id=suvaline_locale_timzone_dict["timezone"],
+        locale="et-EE",
+        timezone_id="Europe/Tallinn",
         viewport={"width": 1920, "height": 1080},
         bypass_csp=True,
     )
@@ -69,68 +68,6 @@ def uued_küpsised(page, context):
     page.goto("https://ostukorvid.ee", wait_until="networkidle")
     context.storage_state(path="auth.json")
     print("Valmis")
-
-
-def värskenda_context_küpsised(p, vana_context):
-    """
-    Contexti värskendamiseks, et vähendada lehe throttle võimalusi.
-    """
-
-    vana_context.close()
-
-    storage_state = "auth.json" if os.path.exists("auth.json") else None
-    suvaline_locale_timzone_dict = random.choice(locale_timezone_list)
-
-    browser = p.chromium.launch(
-        headless = True,
-        args=[
-        "--disable-gpu",
-        "--disable-extensions",
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-        "--blink-settings=imagesEnabled=false",
-        "--window-size=1920,1080"
-        ]
-    )
-    
-    context = browser.new_context(
-        storage_state=storage_state,
-        user_agent= random.choice(user_agent_list),
-        locale=suvaline_locale_timzone_dict["locale"],
-        timezone_id=suvaline_locale_timzone_dict["timezone"],
-        viewport={"width": 1920, "height": 1080},
-        bypass_csp=True,
-    )
-
-    page = context.new_page()
-    page.set_default_timeout(15000) #ms
-    
-    page.route("**/*", lambda route, request:
-        route.abort() if request.resource_type in ["image","font","stylesheet"] else route.continue_()
-    )
-    
-    uued_küpsised(page, context)
-
-    return context, page
-
-
-def safe_goto(page, leht, proove=3, timeout=15000):
-    """
-    Abifunktsioon, et saaks mitu korda ühte linki proovida,
-    kui esimesel korral tuleb TimeOutError. Ainult toote_scraper() jaoks.
-    """
-    for katse in range(proove):
-        try:
-            page.goto(leht, wait_until="networkidle", timeout=timeout)
-            if page.locator(".col-span-2.mt-2").count() > 0:
-                return True
-            page.wait_for_selector(".col-span-2.mt-2", timeout=timeout)
-            return True
-        except:
-            print(f"Proovin uuesti lehte {leht}. Nüüd on proov nr {katse + 1}")
-            time.sleep(random.uniform(2.0, 5.0))
-    print(f"Poe infot ei ilmunud pärast {proove} katset. Toode: {leht}")
-    return False
 
 
 def sitemap_info(sihtmärgid):
@@ -165,7 +102,7 @@ def kasulik_info(page, leht):
     """
     page.goto(leht)
 
-    page.wait_for_selector(".ml-1.w-full", timeout=25000)
+    page.wait_for_selector(".ml-1.w-full", timeout=10000)
     supp = BeautifulSoup(page.content(), "html.parser")
 
     info_kaart = supp.select(".ml-1.w-full") #Siin on ka alkoholivabad tooted. Tooted millel pole % märgitud ja tooted millel pole maht märgitud.
@@ -203,7 +140,7 @@ def kasulik_info(page, leht):
     return kasulik_info_kaart
 
 
-def toote_scraper(p, page, jär, kategooria_nimi):
+def toote_scraper(page, jär, kategooria_nimi):
     """
     Leian kategoorias iga korrektse infoga toote kohta kõik info:
     nimi, maht, protsent, etanooli kogus, etanool euro kohta, poe nimi, hind, millal uuendati.
@@ -214,71 +151,51 @@ def toote_scraper(p, page, jär, kategooria_nimi):
     faili_nimi = f"{kategooria_nimi}.csv"
     mitmes_toode = 0
     read = []
-    
-    toote_protsent_muster = re.compile(r"(\d+(?:[.,]\d+)?)\s*%", re.IGNORECASE)
-    
-    toote_maht_muster = re.compile(r"""
-                                    (\d+(?:[.,]\d+)?)  #ühiku väärtus nt 500
-                                    \s*
-                                    (ml|cl|l)
-                                    (?=\W|$|x|×|\*)""" #ühik
-                                    , re.VERBOSE | re.IGNORECASE)
-    
-    toote_paki_muster = re.compile(r"""
-                                    (?<!\d)
-                                    \b(\d+)\s*(?:x|×|х|\*)\s*\d*(?:[.,]\d*)?\s*(?:ml|cl|l)?                    # 6x330ml
-                                    |
-                                    \b(\d+)\s*(?:x|×|х|\*|[-]?\s*(?:tk|pk|pakk|pakend|karp|kohver))(?=[\s.,;)]|$) # 330mlx6
-                                    |
-                                    (?:^|(?<=[\s.,;]))(?:x|×|х|\*)\s*(\d+)\b                                   # x6
-                                    """, re.VERBOSE | re.IGNORECASE)
-    
-    hind_muster = re.compile(r"(\d+(?:[.,]\d+)?)\s*€", re.IGNORECASE)
-    
-    viimati_uuendatud_muster = re.compile(r"""(?:(\d+)[\s\u00A0\u202F]*)?           #väärtus
-                                                    ([\wäöüõ]+)                     #ühik
-                                                    (?:[\s\u00A0\u202F]+aega)?      #\u00A0 - nbsp \u202F - nbsp narrrow. Siin vaja millegipärast, muidu annab None vahest
-                                                    [\s\u00A0\u202F]*tagasi""",
-                                                    re.UNICODE | re.VERBOSE | re.IGNORECASE)
     for el in jär:
-        if mitmes_toode % 20 == 0:
-            time.sleep(random.uniform(3.0, 6.0))
-        if mitmes_toode != 0 and mitmes_toode % 100 == 0:
-            context, page = värskenda_context_küpsised(p, page.context)
-            print("Scraper värskendatud")
-        
-
         toode_el = el[0].strip()
         toode = toode_el.strip().lower()
         toote_link = el[1]
         
         # Leian protsendi
-        protsent_tekst = toote_protsent_muster.search(toode)
-        if not protsent_tekst:
+        toote_protsent_match = re.search(r"(\d+(?:[.,]\d+)?)\s*%", toode)
+        if not toote_protsent_match:
             print(f"PROTSENT ERROR: {toode}")
             continue
 
-        toote_protsent = float(protsent_tekst.group(1).replace(',', '.'))
+        toote_protsent = float(toote_protsent_match.group(1).replace(',', '.'))
         if toote_protsent == 0.0: #Mõnel alko tootel pandud 0.0, et näidata alkovaba
             print(f"Alkovaba err: {toode}")
             continue
         
 
         #Leian Mahu
+        toote_maht_match = re.search(r"""
+                                    (\d+(?:[.,]\d+)?)        #ühiku väärtus nt 500
+                                    \s*
+                                    (ml|cl|l)
+                                    (?=\W|$|x|×|\*)""" #ühik
+                                    , toode, re.VERBOSE)
         
-        maht_tekst = toote_maht_muster.search(toode)
-        if not maht_tekst:
+        if not toote_maht_match:
             print(f"MAHU VIGA: {toode}")
             continue
-        toote_maht = float(maht_tekst.group(1).replace(',', '.'))
         
-        pakk_tekst = toote_paki_muster.search(toode)
-        if pakk_tekst:
-            toodet_pakis = int(next(g for g in pakk_tekst.groups() if g))
+
+        toote_paki_match = re.search(r"""
+                                    (?<!\d)                    # väldi brändinumbreid nagu 1664
+                                    \b(\d+)\s*(?:x|×|\*)\s*\d*(?:[.,]\d*)?\s*(?:ml|cl|l)?  # 6x330ml, 24*0.33L
+                                    |
+                                    \b(\d+)\s*(?:x|×|[-]?\s*(?:tk|pk|pakk|pakend|karp|kohver))(?=[\s.,;)]|$)  # 6tk, 12-pakk
+                                    |
+                                    (?:^|(?<=[\s.,;]))(?:x|×|\*)\s*(\d+)\b                # x6, ×6, *6
+                                    """, toode, re.VERBOSE)
+
+        if toote_paki_match:
+            toodet_pakis = int(next(g for g in toote_paki_match.groups() if g))
         else:
             toodet_pakis = 1
-        
-        mahu_ühik = maht_tekst.group(2)
+        toote_maht = float(toote_maht_match.group(1).replace(',', '.'))
+        mahu_ühik = toote_maht_match.group(2)
 
         #konverteerin milliliitriteks
         if mahu_ühik == "ml":
@@ -295,10 +212,13 @@ def toote_scraper(p, page, jär, kategooria_nimi):
         
         
         # Vastava poe või poodide info leidmine
-        time.sleep(random.uniform(0.8, 2.2))
-        if not safe_goto(page, toote_link):
+        try:
+            page.goto(toote_link)
+            time.sleep(random.uniform(0.8, 2.2))
+            page.wait_for_selector(".col-span-2.mt-2", timeout=10000)
+        except:
+            print(f"Poeinfot ei ilmunud: {toote_link}")
             continue
-        
             
         info_supp = BeautifulSoup(page.content(), "html.parser")
         sega_info = info_supp.select_one(".col-span-2.mt-2")
@@ -324,7 +244,7 @@ def toote_scraper(p, page, jär, kategooria_nimi):
             hind_el = pood.select_one("span.text-xl.font-bold")
             if hind_el:
                 hind_tekst = hind_el.text.strip()
-                hind = float(hind_muster.search(hind_tekst).group(1).replace(',', '.'))
+                hind = float(re.search(r"(\d+(?:[.,]\d+)?)\s*€", hind_tekst).group(1).replace(',', '.'))
             else:
                 hind = None
 
@@ -343,7 +263,11 @@ def toote_scraper(p, page, jär, kategooria_nimi):
             aeg_ümar = None
             if viimati_uuendatud_el:
                 viimati_uuendatud_sisu = viimati_uuendatud_el.text.strip().lower()
-                viimati_uuendatud_tekst = viimati_uuendatud_muster.search(viimati_uuendatud_sisu)
+                viimati_uuendatud_tekst = re.search(r"""(?:(\d+)[\s\u00A0\u202F]*)? #väärtus
+                                                    ([\wäöüõ]+)                     #ühik
+                                                    (?:[\s\u00A0\u202F]+aega)?      #\u00A0 - nbsp \u202F - nbsp narrrow. Siin vaja millegipärast, muidu annab None vahest
+                                                    [\s\u00A0\u202F]*tagasi""",
+                                                    viimati_uuendatud_sisu, flags=re.UNICODE | re.VERBOSE)
                 if viimati_uuendatud_tekst:
                     aja_väärtus = int(viimati_uuendatud_tekst.group(1)) if viimati_uuendatud_tekst.group(1) else 1 #Kuna tekstis on "uuendatud: tund/minut/päev aega tagasi"
                     ühiku_väärtus = viimati_uuendatud_tekst.group(2)
@@ -400,9 +324,11 @@ def main():
     scrapeime = ["olu", "viin", "siider", "vein"]
     kategooriad = sitemap_info(scrapeime)
 
-    for kategooria_nimi, leht in kategooriad:
+    for i, (kategooria_nimi, leht) in enumerate(kategooriad):
+        if i % 2 == 0 and i != 0:
+            uued_küpsised(page, context)
         tooted = kasulik_info(page, leht)
-        toote_scraper(p, page, tooted, kategooria_nimi)
+        toote_scraper(page, tooted, kategooria_nimi)
     
     context.close()
     p.stop()
