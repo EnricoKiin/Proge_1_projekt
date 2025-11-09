@@ -64,13 +64,10 @@ def uued_küpsised(page, context):
     Loon ja uuendan küpsiseid, et näha rohkem välja nagu inimene mitte bot.
     """
     
-    if not os.path.exists("auth.json") or time.time() - os.path.getmtime("auth.json") > 60:
-        print("Küpsiste uuendamine")
-        page.goto("https://ostukorvid.ee", wait_until="networkidle")
-        context.storage_state(path="auth.json")
-        print("Valmis")
-    else:
-        print("Küpsised veel värsekd")
+    print("Küpsiste uuendamine")
+    page.goto("https://ostukorvid.ee", wait_until="networkidle")
+    context.storage_state(path="auth.json")
+    print("Valmis")
 
 
 def sitemap_info(sihtmärgid):
@@ -84,7 +81,7 @@ def sitemap_info(sihtmärgid):
     puhtad_kategooriad = [url for url in mustad_kategooriad if "?tag=" not in url] #Eemaldab alamkategooriad, et vähem asju otsida
 
 
-    muster = re.compile(rf"/({'|'.join(sihtmärgid)})(?:/|$)", re.IGNORECASE) #Saaks panna ka alguse https://ostukorvid.ee/kategooriad/, aga seega võib ka lihtsamini katki minna
+    muster = re.compile(rf"/({'|'.join(sihtmärgid)})(?:/|$)", re.IGNORECASE) 
     
 
     scrape_targets = []
