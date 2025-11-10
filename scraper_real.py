@@ -21,7 +21,8 @@ from Context_lists import user_agent_list, locale_timezone_list
 def brauser():
     """
     Brauser set-up, millega hakkame lehtedel käima ja scrapima.
-    Anname võimalikult palju resursse ja valima contexti suvalisi väärtusi igakord,
+    
+    Anname võimalikult palju resursse ja valime igakord juhusliku contexti väärtuse,
     et ei näeks välja nagu sama inimene.
     Keelame piltide ja CSS laadimise, et vähendada aja ja resurssi kulu.
     """
@@ -51,7 +52,7 @@ def brauser():
     )
 
     page = context.new_page()
-    page.set_default_timeout(15000) #ms
+    page.set_default_timeout(15000) # ms
     
     page.route("**/*", 
                lambda route, request: route.abort()
@@ -93,7 +94,7 @@ def värskenda_context_küpsised(p, vana_context):
     )
 
     page = context.new_page()
-    page.set_default_timeout(15000) #ms
+    page.set_default_timeout(15000) # ms
     
     page.route(
         "**/*", 
@@ -134,7 +135,8 @@ def sitemap_info(sihtmärgid):
     sitemap_info = requests.get(sitemap_url)
     sitemap_soup = BeautifulSoup(sitemap_info.content, "xml")
     mustad_kategooriad = [loc.text for loc in sitemap_soup.find_all("loc")]
-    puhtad_kategooriad = [url for url in mustad_kategooriad if "?tag=" not in url] #Eemaldab alamkategooriad, et vähem asju otsida
+    # Eemaldab alamkategooriad, et vähem asju otsida
+    puhtad_kategooriad = [url for url in mustad_kategooriad if "?tag=" not in url] 
 
 
     muster = re.compile(rf"/({'|'.join(sihtmärgid)})(?:/|$)", re.IGNORECASE) 
@@ -153,8 +155,10 @@ def sitemap_info(sihtmärgid):
 
 def kasulik_info(page, leht):
     """
-    Saan veebilehest kõik kasutatavad tooted, millelt info võtta ja eemaldan kõik pooliku infoga tooted.
-    Tagastan järjendi ennikutega, kus igas ennikus on toote nime element, toote mahtu tekst ja toote link.
+    Saan veebilehest kõik kasutatavad tooted, millelt info võtta
+    ja eemaldan kõik pooliku infoga tooted.
+    Tagastan järjendi ennikutega, kus igas ennikus on toote nime element, 
+    toote mahu tekst ja toote link.
     """
     page.goto(leht)
 
@@ -165,9 +169,10 @@ def kasulik_info(page, leht):
     
     supp = BeautifulSoup(page.content(), "html.parser")
 
+    # Siin on ka alkoholivabad tooted ja tooted, millel pole % märgitud.
     info_kaardid = supp.select(
         "a.m-1.inline-flex.items-center.rounded.border-2.border-gray-300.p-1"
-    ) #Siin on ka alkoholivabad tooted ja Tooted millel pole % märgitud.
+    ) 
     
     kasulikud_info_kaardid = []
 
@@ -233,9 +238,9 @@ def toote_scraper(p, page, jär, kategooria_nimi):
     
     hind_muster = re.compile(r"(\d+(?:[.,]\d+)?)\s*€", re.IGNORECASE)
     
-    viimati_uuendatud_muster = re.compile(r"""(?:(\d+)[\s\u00A0\u202F]*)?           #väärtus
-                                                    ([\wäöüõ]+)                     #ühik
-                                                    (?:[\s\u00A0\u202F]+aega)?      #\u00A0 - nbsp \u202F - nbsp narrrow. Siin vaja millegipärast, muidu annab None vahest
+    viimati_uuendatud_muster = re.compile(r"""(?:(\d+)[\s\u00A0\u202F]*)?           # väärtus
+                                                    ([\wäöüõ]+)                     # ühik
+                                                    (?:[\s\u00A0\u202F]+aega)?      # \u00A0 - nbsp \u202F - nbsp narrrow. Siin vaja millegipärast, muidu annab None vahest
                                                     [\s\u00A0\u202F]*tagasi""",
                                                     re.UNICODE | re.VERBOSE | re.IGNORECASE)
     for el in jär:
@@ -258,13 +263,12 @@ def toote_scraper(p, page, jär, kategooria_nimi):
             continue
 
         toote_protsent = float(protsent_tekst.group(1).replace(',', '.'))
-        if toote_protsent == 0.0: #Mõnel alko tootel pandud 0.0, et näidata alkovaba
+        if toote_protsent == 0.0: # Mõnel alko tootel pandud 0.0, et näidata alkovaba
             print(f"Alkovaba err: {toode}")
             continue
         
 
-        #Leian Mahu
-        
+        # Leian mahu
         maht_tekst = toote_maht_muster.search(toote_maht_tekst)
         if not maht_tekst:
             print(f"MAHU VIGA: {toode}")
@@ -273,7 +277,7 @@ def toote_scraper(p, page, jär, kategooria_nimi):
         
         mahu_ühik = maht_tekst.group(2)
 
-        #konverteerin milliliitriteks
+        # Konverteerin milliliitriteks
         if mahu_ühik == "ml":
             pass
         elif mahu_ühik == "cl":
@@ -282,7 +286,7 @@ def toote_scraper(p, page, jär, kategooria_nimi):
             toote_maht *= 1000
 
 
-        #Leian nime
+        # Leian nime
         toote_nimi = toode_el
         
         
@@ -303,7 +307,7 @@ def toote_scraper(p, page, jär, kategooria_nimi):
 
         for pood in poed:
      
-            #Leian poe nime
+            # Leian poe nime
             poe_nimi = None
             for span in pood.find_all("span"):
                 tekst = span.get_text(strip=True)
@@ -312,7 +316,7 @@ def toote_scraper(p, page, jär, kategooria_nimi):
                     break
                     
                     
-            #Leian hinna
+            # Leian hinna
             hind_el = pood.select_one("span.text-xl.font-bold")
             if hind_el:
                 hind_tekst = hind_el.text.strip()
@@ -321,7 +325,7 @@ def toote_scraper(p, page, jär, kategooria_nimi):
                 hind = None
 
 
-            #Leian millal viimati uuendati 
+            # Leian millal viimati poe andmeid uuendati
             ühikud = {
                 "sekund": 1, "sekundit": 1,
                 "minut": 60, "minutit": 60,
@@ -337,7 +341,10 @@ def toote_scraper(p, page, jär, kategooria_nimi):
                 viimati_uuendatud_sisu = viimati_uuendatud_el.text.strip().lower()
                 viimati_uuendatud_tekst = viimati_uuendatud_muster.search(viimati_uuendatud_sisu)
                 if viimati_uuendatud_tekst:
-                    aja_väärtus = int(viimati_uuendatud_tekst.group(1)) if viimati_uuendatud_tekst.group(1) else 1 #Kuna tekstis on "uuendatud: tund/minut/päev aega tagasi"
+                    if viimati_uuendatud_tekst.group(1):
+                        aja_väärtus = int(viimati_uuendatud_tekst.group(1))
+                    else:
+                        aja_väärtus = 1 # Kuna tekstis on "uuendatud: tund/minut/päev aega tagasi"
                     ühiku_väärtus = viimati_uuendatud_tekst.group(2)
                     sekundi_väärtus = ühikud.get(ühiku_väärtus)
                     if not sekundi_väärtus:
@@ -367,7 +374,7 @@ def toote_scraper(p, page, jär, kategooria_nimi):
             mitmes_toode += 1
             print(f"{mitmes_toode}", end="\r")
     
-    #Sorteerin read kõige suurema etanool_euro_kohta järgi
+    # Sorteerin read kõige suurema etanool_euro_kohta järgi
     read.sort(key=lambda väärtus: väärtus[4], reverse=True)
     with open(faili_nimi, "w", encoding="UTF-8") as f:
         f.write("Toode;Maht_ml;Protsent;Etanool;Etanool/€;Pood;Hind;Uuendatud;Link\n")
@@ -385,7 +392,8 @@ def toote_scraper(p, page, jär, kategooria_nimi):
 
 def main():
     """
-    Scrapin ostukorvid.ee lehte, et leida igas soovitud kategooria kõige odavama toote, mis sisaldab kõige rohkem etanooli.
+    Scrapin ostukorvid.ee lehte, et leida igas soovitud kategoorias kõige odavama toote, 
+    mis sisaldab kõige rohkem etanooli.
     Tagastan info csv failidena.
     """
     p, context, page = brauser()
