@@ -77,21 +77,9 @@ def värskenda_context_küpsised(p, vana_context):
     """
 
     vana_context.close()
-
+    browser = vana_context.browser
     storage_state = "auth.json" if os.path.exists("auth.json") else None
     suvaline_locale_timzone_dict = random.choice(locale_timezone_list)
-
-    browser = p.chromium.launch(
-        headless = True,
-        args=[
-        "--disable-gpu",
-        "--disable-extensions",
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-        "--blink-settings=imagesEnabled=false",
-        "--window-size=1920,1080"
-        ]
-    )
     
     context = browser.new_context(
         storage_state=storage_state,
@@ -161,46 +149,53 @@ def sitemap_info(sihtmärgid):
 def kasulik_info(page, leht):
     """
     Saan veebilehest kõik kasutatavad tooted, millelt info võtta ja eemaldan kõik pooliku infoga tooted.
-    Tagastan järjendi ennikutega, kus igas ennikus on toote nime element ja toote link.
+    Tagastan järjendi ennikutega, kus igas ennikus on toote nime element, toote mahtu tekst ja toote link.
     """
     page.goto(leht)
 
-    page.wait_for_selector(".ml-1.w-full", timeout=25000)
+    page.wait_for_selector("a.m-1.inline-flex.items-center.rounded.border-2.border-gray-300.p-1", timeout=25000)
     supp = BeautifulSoup(page.content(), "html.parser")
 
-    info_kaart = supp.select(".ml-1.w-full") #Siin on ka alkoholivabad tooted. Tooted millel pole % märgitud ja tooted millel pole maht märgitud.
-    kasulik_info_kaart = []
-    for el in info_kaart:
-        
+    info_kaardid = supp.select("a.m-1.inline-flex.items-center.rounded.border-2.border-gray-300.p-1") #Siin on ka alkoholivabad tooted ja Tooted millel pole % märgitud.
+    
+    kasulikud_info_kaardid = []
+
+    for el in info_kaardid:
         nimi_el = el.select_one(".line-clamp-2.text-base")
         if not nimi_el:
             continue
-        nimi_el_tekst = nimi_el.text
-        nimi = nimi_el_tekst.strip().lower()
-            
+
+        nimi_el_tekst = nimi_el.text.strip()
+        nimi = nimi_el_tekst.lower()
 
         if "%" not in nimi:
             continue
-        elif not any(x in nimi for x in ["ml", "cl", "l"]):
-            continue
         elif "alk.vaba" in nimi or "alkoholivaba" in nimi:
+            continue
+
+        maht_el = el.select_one("div.relative span")
+        
+        if not maht_el:
+            continue
+        maht = maht_el.text.strip().lower()
+        
+        if not any(x in maht for x in ["ml", "cl", "l"]):
             continue
         
 
-        parent_el = nimi_el.find_parent("a")
-        if not parent_el or not parent_el.has_attr("href"):
+        link = el.get("href", "")
+        if not link:
             continue
-        link = parent_el["href"]
         if not link.startswith("http"):
             link = "https://ostukorvid.ee" + link
         
         
-        toote_info_paar = (nimi_el_tekst, link)
-        kasulik_info_kaart.append(toote_info_paar)
+        toote_info_paar = (nimi_el_tekst, maht, link)
+        kasulikud_info_kaardid.append(toote_info_paar)
         
 
-    random.shuffle(kasulik_info_kaart)
-    return kasulik_info_kaart
+    random.shuffle(kasulikud_info_kaardid)
+    return kasulikud_info_kaardid
 
 
 def toote_scraper(p, page, jär, kategooria_nimi):
@@ -218,20 +213,12 @@ def toote_scraper(p, page, jär, kategooria_nimi):
     toote_protsent_muster = re.compile(r"(\d+(?:[.,]\d+)?)\s*%", re.IGNORECASE)
     
     toote_maht_muster = re.compile(r"""
-                                    (\d+(?:[.,]\d+)?)  #ühiku väärtus nt 500
+                                    (\d+(?:[.,]\d+)?)  # ühiku väärtus nt 500
                                     \s*
-                                    (ml|cl|l)
-                                    (?=\W|$|x|×|\*)""" #ühik
+                                    (ml|cl|l)          # ühik
+                                    """ 
                                     , re.VERBOSE | re.IGNORECASE)
     
-    toote_paki_muster = re.compile(r"""
-                                    (?<!\d)
-                                    \b(\d+)\s*(?:x|×|х|\*)\s*\d*(?:[.,]\d*)?\s*(?:ml|cl|l)?                    # 6x330ml
-                                    |
-                                    \b(\d+)\s*(?:x|×|х|\*|[-]?\s*(?:tk|pk|pakk|pakend|karp|kohver))(?=[\s.,;)]|$) # 330mlx6
-                                    |
-                                    (?:^|(?<=[\s.,;]))(?:x|×|х|\*)\s*(\d+)\b                                   # x6
-                                    """, re.VERBOSE | re.IGNORECASE)
     
     hind_muster = re.compile(r"(\d+(?:[.,]\d+)?)\s*€", re.IGNORECASE)
     
@@ -250,7 +237,8 @@ def toote_scraper(p, page, jär, kategooria_nimi):
 
         toode_el = el[0].strip()
         toode = toode_el.strip().lower()
-        toote_link = el[1]
+        toote_maht_tekst = el[1]
+        toote_link = el[2]
         
         # Leian protsendi
         protsent_tekst = toote_protsent_muster.search(toode)
@@ -266,17 +254,11 @@ def toote_scraper(p, page, jär, kategooria_nimi):
 
         #Leian Mahu
         
-        maht_tekst = toote_maht_muster.search(toode)
+        maht_tekst = toote_maht_muster.search(toote_maht_tekst)
         if not maht_tekst:
             print(f"MAHU VIGA: {toode}")
             continue
         toote_maht = float(maht_tekst.group(1).replace(',', '.'))
-        
-        pakk_tekst = toote_paki_muster.search(toode)
-        if pakk_tekst:
-            toodet_pakis = int(next(g for g in pakk_tekst.groups() if g))
-        else:
-            toodet_pakis = 1
         
         mahu_ühik = maht_tekst.group(2)
 
@@ -287,7 +269,6 @@ def toote_scraper(p, page, jär, kategooria_nimi):
             toote_maht *= 10
         else:
             toote_maht *= 1000
-        kogu_maht = toodet_pakis * toote_maht #ml
 
 
         #Leian nime
@@ -356,12 +337,12 @@ def toote_scraper(p, page, jär, kategooria_nimi):
                         aeg_ümar = aeg.replace(second=0, microsecond=0)
             
             
-            etanool = round(kogu_maht * (toote_protsent / 100), 3)
-            etanool_euro_kohta = round(kogu_maht * (toote_protsent / 100) / hind, 3)
+            etanool = round(toote_maht * (toote_protsent / 100), 3)
+            etanool_euro_kohta = round(toote_maht * (toote_protsent / 100) / hind, 3)
             
 
             read.append([toote_nimi,
-                        kogu_maht,
+                        toote_maht,
                         toote_protsent,
                         etanool,
                         etanool_euro_kohta,
@@ -388,6 +369,8 @@ def toote_scraper(p, page, jär, kategooria_nimi):
     for i in range(2):
         print()
 
+    return page.context, page
+
 
 def main():
     """
@@ -402,7 +385,7 @@ def main():
 
     for kategooria_nimi, leht in kategooriad:
         tooted = kasulik_info(page, leht)
-        toote_scraper(p, page, tooted, kategooria_nimi)
+        context, page = toote_scraper(p, page, tooted, kategooria_nimi)
     
     context.close()
     p.stop()
