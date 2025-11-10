@@ -53,8 +53,10 @@ def brauser():
     page = context.new_page()
     page.set_default_timeout(15000) #ms
     
-    page.route("**/*", lambda route, request:
-        route.abort() if request.resource_type in ["image","font","stylesheet"] else route.continue_()
+    page.route("**/*", 
+               lambda route, request: route.abort()
+                   if request.resource_type in ["image","font","stylesheet"] 
+                   else route.continue_()
     )
 
     return p, context, page
@@ -93,8 +95,11 @@ def värskenda_context_küpsised(p, vana_context):
     page = context.new_page()
     page.set_default_timeout(15000) #ms
     
-    page.route("**/*", lambda route, request:
-        route.abort() if request.resource_type in ["image","font","stylesheet"] else route.continue_()
+    page.route(
+        "**/*", 
+        lambda route, request: route.abort() 
+            if request.resource_type in ["image","font","stylesheet"] 
+            else route.continue_()
     )
     
     uued_küpsised(page, context)
@@ -153,10 +158,16 @@ def kasulik_info(page, leht):
     """
     page.goto(leht)
 
-    page.wait_for_selector("a.m-1.inline-flex.items-center.rounded.border-2.border-gray-300.p-1", timeout=25000)
+    page.wait_for_selector(
+        "a.m-1.inline-flex.items-center.rounded.border-2.border-gray-300.p-1", 
+        timeout=25000
+    )
+    
     supp = BeautifulSoup(page.content(), "html.parser")
 
-    info_kaardid = supp.select("a.m-1.inline-flex.items-center.rounded.border-2.border-gray-300.p-1") #Siin on ka alkoholivabad tooted ja Tooted millel pole % märgitud.
+    info_kaardid = supp.select(
+        "a.m-1.inline-flex.items-center.rounded.border-2.border-gray-300.p-1"
+    ) #Siin on ka alkoholivabad tooted ja Tooted millel pole % märgitud.
     
     kasulikud_info_kaardid = []
 
